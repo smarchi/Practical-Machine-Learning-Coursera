@@ -1,0 +1,84 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Sebastian Marchi"
+date: "2/6/2018"
+output: html_document
+---
+
+#Introduction
+
+In this project I use the [Weight Lifting Exercises Dataset](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) to predict how well a dumbbell excercise is performed. The data consist of several motion measurements from five diferent sensor placed in the dumbbell and in the person's body. The exercise is performed four times: one correctly (class A) and three in different wrong ways (classes B, C, and D). Each simulation is repeated by six different males.
+
+To train a model, I first select some of the dataset features and use a random forest algorithm with a 10-fold cross validatio to estimate the out-of-sample error. The finally accuracy is reported.
+
+# Data preparation
+
+Read the training data and explore its structure.
+
+```{r cache = TRUE}
+training <- read.csv("data/pml-training.csv", stringsAsFactors = FALSE, 
+                     na.strings = "")
+str(training)
+```
+
+Remove columns 1 to 7 and transform "classe" variable to factor, since these variables are not useful as predictors. Then, transform character variables to numeric.
+
+```{r warning = FALSE, cache = TRUE}
+training <- subset(training, select = -c(1:7))
+training$classe <- as.factor(training$classe)
+for (i in 1:dim(training)[2]) {
+    if (is.character(training[,i])) { 
+        training[,i] <- as.numeric(training[,i]) 
+        }
+}
+```
+
+Assign value 0 to all NA values for numeric and integer variables. In this step, I assume that NA values represent no measurements, i.e. a numeric value equal to 0.
+
+```{r cache = TRUE}
+training[is.na(training)] <- 0
+```
+
+Finally, remove variables where all values are 0. These predictors are not useful for classification, since all values are the same for all the exercise classes.
+
+```{r cache = TRUE}
+rm_vars <- numeric()
+for (i in 1:dim(training)[2]) {
+    if (all(training[,i] == 0)) {
+        rm_vars <- c(rm_vars, i)
+    }
+}
+training <- subset(training, select = -rm_vars)
+```
+
+# Model training
+
+The model to train is a random forest. The estimation of the out-of-sample error is performed through a 10-fold cross-validation. Also, I allow for parallelization to speed the training process.
+
+```{r message=FALSE, warning=FALSE, cache = TRUE}
+library("caret")
+set.seed(123)
+fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
+
+#Paralell processes
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+
+#Train model
+mod_rf <- train(classe ~., data = training, method = 'rf', 
+                trControl = fitControl)
+
+stopCluster(cluster)
+registerDoSEQ()
+
+print(mod_rf)
+
+```
+# Results
+
+The out-of-sample accuracy estimation obtained for the random forest model usin a 10-fold corss-validation is 0.995. This means that, when predicting the classes for a new dataset, there is on average a 0.5% chance of getting an incorrect class prediction.
+
+
+
